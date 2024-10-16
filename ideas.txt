@@ -1,0 +1,7 @@
+#Larger Target Space 
+#Stick with the normal ode solver
+#Make a 2D mesh, and make an ode solver go from node to node formmesh 
+#look into the force space,horintoal and vertical axis represent the horiontal and vertical force configs(rectangular grid)
+
+#storee theta(s) of solution at each node, and store int
+#And during each episode nearest node

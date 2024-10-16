@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from elasticEnv import OptimizedElasticaEnv
+from elasticEnvmesh import OptimizedElasticaEnv
 
 def run_env_test(num_episodes=100, steps_per_episode=100):
     env = OptimizedElasticaEnv()

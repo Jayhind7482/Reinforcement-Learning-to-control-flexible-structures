@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.integrate import solve_bvp
 import gymnasium as gym
-from gymnasium.spaces import Box
+from gymnasium.spaces import Box, Discrete
 import numba
 import pygame
 
@@ -40,18 +40,29 @@ def calculate_reward(x_tip, y_tip, x_target, y_target):
 class OptimizedElasticaEnv(gym.Env):
     def __init__(self):
         super().__init__()
-        self.action_space = Box(low=np.array([-1, -1]), high=np.array([1, 1]), dtype=np.float32)
-        self.observation_space = Box(low=-100, high=100, shape=(13,), dtype=np.float32)
+        
+        # Define the mesh grid for the action space
+        self.h_range = np.linspace(-0.55, -0.25, 31)  # 31 points from -0.55 to -0.25
+        self.v_range = np.linspace(-0.05, 0.35, 41)  # 41 points from -0.05 to 0.35
+        self.mesh_shape = (len(self.h_range), len(self.v_range))
+        
+        # Create the discrete action space
+        self.action_space = Discrete(4)  # 0: left, 1: right, 2: up, 3: down
+        
+        self.observation_space = Box(low=-100, high=100, shape=(15,), dtype=np.float32)
         self.target_space = Box(low=np.array([4.5, -1]), high=np.array([5.57, 1]), dtype=np.float32)
         
-        #Mode of the intial 
-        self.l = 1 #length of the elastica
+        self.l = 1  # length of the elastica
         self.s = np.linspace(0, self.l, 500, dtype=np.float32)
         self.num_timestep = 0
-        self.h = -0.4
-        self.v = 0.15
         self.x_target = 0
         self.y_target = 0
+        
+        # Initialize the mesh with pre-calculated solutions
+        self.mesh = self._initialize_mesh()
+        
+        self.current_node = (15, 20)  # Start at the middle of the mesh
+        self.h, self.v = self.h_range[self.current_node[0]], self.v_range[self.current_node[1]]
         
         self.screen_width = 800
         self.screen_height = 600
@@ -62,17 +73,34 @@ class OptimizedElasticaEnv(gym.Env):
         self.np_random = None  # Add this line
         self.reset()  # This will initialize self.np_random
 
+    def _initialize_mesh(self):
+        mesh = np.zeros(self.mesh_shape + (6, 500), dtype=np.float32)
+        for i, h in enumerate(self.h_range):
+            for j, v in enumerate(self.v_range):
+                sol = elastica_solve(h, v, self.l, self.s)
+                X, Y, theta_dash_0, theta_dash_l, theta_l, E = elastica_compute(sol, self.l, self.s)
+                mesh[i, j] = np.array([X, Y, theta_dash_0, theta_dash_l, theta_l, E])
+        return mesh
+
     def step(self, action):
         self.num_timestep += 1
-        self.num_timestep
-        scaled_action = np.array([
-            action[0] * 0.15 + -0.05,
-            action[1] * 0.2
-        ], dtype=np.float32)
-        self.h += scaled_action[0]
-        self.v += scaled_action[1]
-        sol = elastica_solve(self.h, self.v, self.l, self.s)
-        self.X, self.Y, self.theta_dash_0, self.theta_dash_l, self.theta_l, self.E = elastica_compute(sol, self.l, self.s)
+        
+        # Update the current node based on the action
+        i, j = self.current_node
+        if action == 0 and i > 0:  # left
+            i -= 1
+        elif action == 1 and i < self.mesh_shape[0] - 1:  # right
+            i += 1
+        elif action == 2 and j < self.mesh_shape[1] - 1:  # up
+            j += 1
+        elif action == 3 and j > 0:  # down
+            j -= 1
+        
+        self.current_node = (i, j)
+        self.h, self.v = self.h_range[i], self.v_range[j]
+        
+        # Get the pre-calculated solution for the current node
+        self.X, self.Y, self.theta_dash_0, self.theta_dash_l, self.theta_l, self.E = self.mesh[i, j]
 
         observation = self._get_observation()
         reward = calculate_reward(self.X[-1], self.Y[-1], self.x_target, self.y_target)
@@ -92,11 +120,10 @@ class OptimizedElasticaEnv(gym.Env):
             self.np_random = np.random.default_rng()
 
         self.x_target, self.y_target = self.target_space.sample()
-        self.h = -0.4
-        self.v = 0.15 if self.y_target <= 0 else -0.15
+        self.current_node = (15, 20)  # Reset to the middle of the mesh
+        self.h, self.v = self.h_range[self.current_node[0]], self.v_range[self.current_node[1]]
         
-        sol = elastica_solve(self.h, self.v, self.l, self.s)
-        self.X, self.Y, self.theta_dash_0, self.theta_dash_l, self.theta_l, self.E = elastica_compute(sol, self.l, self.s)
+        self.X, self.Y, self.theta_dash_0, self.theta_dash_l, self.theta_l, self.E = self.mesh[self.current_node]
         self.num_timestep = 0
         
         return self._get_observation(), {}
@@ -106,7 +133,9 @@ class OptimizedElasticaEnv(gym.Env):
             self.X[-1], self.Y[-1], self.X[200], self.Y[200], self.X[400], self.Y[400],
             self.theta_l, self.theta_dash_0, self.theta_dash_l, self.E,
             self.x_target, self.y_target,
-            np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2)
+            np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2),
+            self.current_node[0] / (self.mesh_shape[0] - 1),  # Normalized i coordinate
+            self.current_node[1] / (self.mesh_shape[1] - 1)   # Normalized j coordinate
         ], dtype=np.float32)
 
     def _check_done(self):

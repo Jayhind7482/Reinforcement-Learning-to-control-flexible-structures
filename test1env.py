@@ -1,5 +1,5 @@
 import pickle
-from elasticEnv import OptimizedElasticaEnv
+from elasticEnvmesh import OptimizedElasticaEnv
 
 env = OptimizedElasticaEnv()
 try:

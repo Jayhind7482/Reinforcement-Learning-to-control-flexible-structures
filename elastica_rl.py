@@ -7,7 +7,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor, VecNorma
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.monitor import Monitor
-from elasticEnv import OptimizedElasticaEnv
+from elasticEnvmesh import OptimizedElasticaEnv
 
 def make_env(rank, seed=0):
     def _init():
@@ -44,7 +44,7 @@ def objective(trial):
     mean_reward, _ = evaluate_policy(model, eval_env, n_eval_episodes=10, deterministic=True)
     return mean_reward
 
-def train_model(best_params, total_timesteps=10000):
+def train_model(best_params, total_timesteps=1000):
     n_envs = 8  # Use the same number as in the objective function
     env = VecNormalize(SubprocVecEnv([make_env(i) for i in range(n_envs)], start_method='spawn'))
     eval_env = VecNormalize(SubprocVecEnv([make_env(i) for i in range(2)], start_method='spawn'))
@@ -79,15 +79,21 @@ def train_model(best_params, total_timesteps=10000):
 
 def evaluate_model(model, env, episodes=50):
     env.render()  # Initialize the Pygame display
-    for episode in range(1, episodes + 1):
-        state, _ = env.reset()
-        done = False
-        score = 0
-        while not done:
-            action, _ = model.predict(state, deterministic=True)
-            state, reward, done, _, _ = env.step(action)
-            score += reward
-        print(f'Episode: {episode} Score: {score}')
+    try:
+        for episode in range(1, episodes + 1):
+            state, _ = env.reset()
+            done = False
+            score = 0
+            while not done:
+                action, _ = model.predict(state, deterministic=True)
+                state, reward, done, _, _ = env.step(action)
+                score += reward
+                env.render()  # Render each step
+            print(f'Episode: {episode} Score: {score}')
+    except KeyboardInterrupt:
+        print("Evaluation interrupted by user.")
+    finally:
+        env.close()  # Close the environment when done
 
 if __name__ == "__main__":
     # Test environment
@@ -119,7 +125,7 @@ if __name__ == "__main__":
 
     # Evaluate model
     print("\nEvaluating model...")
-    env.enable_render = True
-    evaluate_model(model, env)
+    eval_env = OptimizedElasticaEnv()  # Create a separate environment for evaluation
+    evaluate_model(model, eval_env)
 
     env.close()

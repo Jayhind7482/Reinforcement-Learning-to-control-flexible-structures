@@ -4,13 +4,15 @@ import matplotlib.pyplot as plt
 import random
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+import pickle
+from scipy.spatial import cKDTree
 
 random.seed(42) 
 np.random.seed(42)
 
 # Define the parameters
 l = 1.0  # Length
-h_min, h_max = -32,  32 # Range for h  ( h =32 , v =17)
+h_min, h_max = -32,   32 # Range for h  ( h =32 , v =17)
 v_min, v_max = -17 , 17
 num_points = 80  # Increased number of grid points in each direction
 
@@ -175,3 +177,20 @@ duplicates = {coord: count for coord, count in coordinate_counts.items() if coun
 # Output duplicate points and their counts
 print(f"Number of duplicate points: {len(duplicates)}")
 print("Duplicate points and their counts:", duplicates)
+
+# After calculating all solutions, create a dictionary to store the results
+cheat_sheet_data = {
+    'grid_points': grid_points,
+    'theta_values': theta_dict,
+    'theta_prime_values': theta_prime_dict
+}
+
+# Create a KD-tree for efficient nearest neighbor search
+kdtree = cKDTree(grid_points)
+cheat_sheet_data['kdtree'] = kdtree
+
+# Save the cheat sheet data to a file
+with open('cheat_sheet_data.pkl', 'wb') as f:
+    pickle.dump(cheat_sheet_data, f)
+
+print("Cheat sheet data saved to cheat_sheet_data.pkl")

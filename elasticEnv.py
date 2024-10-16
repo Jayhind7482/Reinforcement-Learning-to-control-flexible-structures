@@ -4,6 +4,17 @@ import gymnasium as gym
 from gymnasium.spaces import Box
 import numba
 import pygame
+import pickle
+from scipy.spatial import cKDTree
+
+# Load the cheat sheet data
+with open('cheat_sheet_data.pkl', 'rb') as f:
+    cheat_sheet_data = pickle.load(f)
+
+grid_points = cheat_sheet_data['grid_points']
+theta_values = cheat_sheet_data['theta_values']
+theta_prime_values = cheat_sheet_data['theta_prime_values']
+kdtree = cheat_sheet_data['kdtree']
 
 @numba.jit(nopython=True)
 def elastica_f(s, y, h, v):
@@ -13,8 +24,13 @@ def elastica_f(s, y, h, v):
 def elastica_bc(ya, yb):
     return np.array([ya[0], yb[1]])
 
+def find_nearest_solution(h, v):
+    _, index = kdtree.query([h, v])
+    return theta_values[index], theta_prime_values[index]
+
 def elastica_solve(h, v, l, s):
-    y0 = np.zeros((2, s.size), dtype=np.float32)
+    nearest_theta, nearest_theta_prime = find_nearest_solution(h, v)
+    y0 = np.vstack((nearest_theta, nearest_theta_prime))
     sol = solve_bvp(lambda s, y: elastica_f(s, y, h, v), elastica_bc, s, y0)
     return sol.sol(s).astype(np.float32)
 
@@ -40,15 +56,18 @@ def calculate_reward(x_tip, y_tip, x_target, y_target):
 class OptimizedElasticaEnv(gym.Env):
     def __init__(self):
         super().__init__()
-        self.action_space = Box(low=np.array([-1, -1]), high=np.array([1, 1]), dtype=np.float32)
+        # Update action space to match cheat sheet ranges
+        self.action_space = Box(low=np.array([-32, -17]), high=np.array([32, 17]), dtype=np.float32)
         self.observation_space = Box(low=-100, high=100, shape=(13,), dtype=np.float32)
-        self.target_space = Box(low=np.array([4.5, -1]), high=np.array([5.57, 1]), dtype=np.float32)
+        # Update target space to match cheat sheet box
+        self.target_space = Box(low=np.array([0.5, -0.4]), high=np.array([0.9, 0.4]), dtype=np.float32)
         
-        self.l = 1 #length of the elastica
+        self.l = 1  # length of the elastica (already correct)
         self.s = np.linspace(0, self.l, 500, dtype=np.float32)
         self.num_timestep = 0
-        self.h = -0.4
-        self.v = 0.15
+        # Update initial h and v values to be within the new action space
+        self.h = 0
+        self.v = 0
         self.x_target = 0
         self.y_target = 0
         
@@ -61,14 +80,17 @@ class OptimizedElasticaEnv(gym.Env):
         self.np_random = None  # Add this line
         self.reset()  # This will initialize self.np_random
 
+        # Add these lines to store the cheat sheet data
+        self.grid_points = grid_points
+        self.theta_values = theta_values
+        self.theta_prime_values = theta_prime_values
+        self.kdtree = kdtree
+
     def step(self, action):
         self.num_timestep += 1
-        scaled_action = np.array([
-            action[0] * 0.15 + -0.05,
-            action[1] * 0.2
-        ], dtype=np.float32)
-        self.h += scaled_action[0]
-        self.v += scaled_action[1]
+        # Remove scaling of action, as the action space now matches the cheat sheet ranges
+        self.h = action[0]
+        self.v = action[1]
         sol = elastica_solve(self.h, self.v, self.l, self.s)
         self.X, self.Y, self.theta_dash_0, self.theta_dash_l, self.theta_l, self.E = elastica_compute(sol, self.l, self.s)
 
@@ -90,8 +112,9 @@ class OptimizedElasticaEnv(gym.Env):
             self.np_random = np.random.default_rng()
 
         self.x_target, self.y_target = self.target_space.sample()
-        self.h = -0.4
-        self.v = 0.15 if self.y_target <= 0 else -0.15
+        # Update initial h and v values to be within the new action space
+        self.h = 0
+        self.v = 0
         
         sol = elastica_solve(self.h, self.v, self.l, self.s)
         self.X, self.Y, self.theta_dash_0, self.theta_dash_l, self.theta_l, self.E = elastica_compute(sol, self.l, self.s)

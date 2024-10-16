@@ -51,7 +51,8 @@ def elastica_compute(sol, l, s):
 @numba.jit(nopython=True)
 def calculate_reward(x_tip, y_tip, x_target, y_target):
     d = np.sqrt((x_tip - x_target)**2 + (y_tip - y_target)**2)
-    return np.exp(-d)
+    base_reward = np.exp(-d)
+    return base_reward 
 
 class OptimizedElasticaEnv(gym.Env):
     def __init__(self):
@@ -86,6 +87,10 @@ class OptimizedElasticaEnv(gym.Env):
         self.theta_prime_values = theta_prime_values
         self.kdtree = kdtree
 
+        # Add these lines to improve reproducibility
+        self.np_random = None
+        self.seed()
+
     def step(self, action):
         self.num_timestep += 1
         # Remove scaling of action, as the action space now matches the cheat sheet ranges
@@ -99,10 +104,15 @@ class OptimizedElasticaEnv(gym.Env):
         terminated = self._check_done()
         truncated = self._check_truncated()
         
+        info = {
+            'distance_to_target': np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2),
+            'energy': self.E
+        }
+
         if self.enable_render:
             self._render_frame()
 
-        return observation, reward, terminated, truncated, {}
+        return observation, reward, terminated, truncated, info
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -120,7 +130,11 @@ class OptimizedElasticaEnv(gym.Env):
         self.X, self.Y, self.theta_dash_0, self.theta_dash_l, self.theta_l, self.E = elastica_compute(sol, self.l, self.s)
         self.num_timestep = 0
         
-        return self._get_observation(), {}
+        info = {
+            'initial_distance': np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2)
+        }
+
+        return self._get_observation(), info
 
     def _get_observation(self):
         return np.array([
@@ -183,3 +197,7 @@ class OptimizedElasticaEnv(gym.Env):
             pygame.quit()
         self.screen = None
         self.clock = None  # Add this line
+
+    def seed(self, seed=None):
+        self.np_random, seed = gym.utils.seeding.np_random(seed)
+        return [seed]

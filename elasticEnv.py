@@ -6,6 +6,7 @@ import numba
 import pygame
 import pickle
 from scipy.spatial import cKDTree
+from gymnasium.wrappers import NormalizeObservation
 
 # Load the cheat sheet data
 with open('cheat_sheet_data.pkl', 'rb') as f:
@@ -53,7 +54,7 @@ class OptimizedElasticaEnv(gym.Env):
     def __init__(self):
         super().__init__()
         # Update action space to match cheat sheet ranges
-        self.action_space = Box(low=np.array([-5, -5]), high=np.array([5, 5]), dtype=np.float32)
+        self.action_space = Box(low=np.array([-2, -2]), high=np.array([2, 2]), dtype=np.float32)
         self.observation_space = Box(low=-100, high=100, shape=(13,), dtype=np.float32)
         # Update target space to match cheat sheet box
         self.target_space = Box(low=np.array([0.5, -0.4]), high=np.array([0.9, 0.4]), dtype=np.float32)
@@ -86,6 +87,10 @@ class OptimizedElasticaEnv(gym.Env):
         self.np_random = None
         self.seed()
 
+        self.max_episode_steps = 19  # Add this line to define max steps
+
+        self = NormalizeObservation(self)
+
     def step(self, action):
         self.num_timestep += 1
         
@@ -93,14 +98,8 @@ class OptimizedElasticaEnv(gym.Env):
         print(f"Before step - h: {self.h}, v: {self.v}")
         print(f"Action: {action}")
         
-        # Scale the action
-        scaled_action = action * np.array([0.1, 0.1])  # Adjust these values as needed
-        self.h += scaled_action[0]
-        self.v += scaled_action[1]
-        
-        # Clip h and v to ensure they stay within the action space
-        self.h = np.clip(self.h, self.action_space.low[0], self.action_space.high[0])
-        self.v = np.clip(self.v, self.action_space.low[1], self.action_space.high[1])
+        self.h += action[0]
+        self.v += action[1]
         
         print(f"After step - h: {self.h}, v: {self.v}")
         
@@ -112,13 +111,7 @@ class OptimizedElasticaEnv(gym.Env):
         done = self._check_done()
         truncated = self._check_truncated()
         
-        info = {
-            'distance_to_target': np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2),
-            'energy': self.E,
-            'h': self.h,
-            'v': self.v
-        }
-
+        info = {}  # Simplify info dictionary
 
         return observation, reward, done, truncated, info
 
@@ -129,18 +122,16 @@ class OptimizedElasticaEnv(gym.Env):
         else:
             self.np_random = np.random.default_rng()
 
-        self.x_target, self.y_target = self.target_space.sample()
-        # Update initial h and v values to be within the new action space
+        # Initialize h and v to random values within the action space
         self.h = 0
         self.v = 0
+        self.x_target, self.y_target = self.target_space.sample()
         
         sol = elastica_solve(self.h, self.v, self.l, self.s)
         self.X, self.Y, self.theta_dash_0, self.theta_dash_l, self.theta_l, self.E = elastica_compute(sol, self.l, self.s)
         self.num_timestep = 0
         
-        info = {
-            'initial_distance': np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2)
-        }
+        info = {}
 
         return self._get_observation(), info
 
@@ -156,7 +147,7 @@ class OptimizedElasticaEnv(gym.Env):
         return bool(np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2) < 0.002)
 
     def _check_truncated(self):
-        return bool(self.num_timestep > 19)
+        return bool(self.num_timestep >= self.max_episode_steps)
 
     def render(self):
         if self.screen is None:
@@ -212,6 +203,10 @@ class OptimizedElasticaEnv(gym.Env):
 
     def _calculate_reward(self):
         distance = np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2)
-        base_reward = np.exp(-distance)
-        energy_penalty = 0.1 * self.E  # Penalize high energy configurations
-        return base_reward - energy_penalty
+        reward = np.exp(-distance)
+        
+        # Add a small penalty for extreme actions to encourage exploration
+        action_penalty = 0.01 * (np.abs(self.h) / self.action_space.high[0] + np.abs(self.v) / self.action_space.high[1])
+        reward -= action_penalty
+        
+        return reward

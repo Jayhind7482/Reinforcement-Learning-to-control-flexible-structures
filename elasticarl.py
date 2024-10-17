@@ -1,5 +1,6 @@
 import os
 import time
+import optuna
 from stable_baselines3 import SAC
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor, VecNormalize
 from stable_baselines3.common.evaluation import evaluate_policy
@@ -21,13 +22,43 @@ def cleanup_env(env):
     elif hasattr(env, 'close'):
         env.close()
 
-def train_model(total_timesteps=10000):
+def objective(trial):
+    learning_rate = trial.suggest_float('learning_rate', 1e-5, 1e-3, log=True)
+    ent_coef = trial.suggest_float('ent_coef', 1e-4, 1e-2, log=True)
+    gamma = trial.suggest_float('gamma', 0.9, 0.9999, log=True)
+    tau = trial.suggest_float('tau', 0.005, 0.05, log=True)
+    batch_size = trial.suggest_categorical('batch_size', [64, 128, 256, 512, 1024])
+    buffer_size = trial.suggest_categorical('buffer_size', [100000, 200000, 500000, 1000000])
+    learning_starts = trial.suggest_categorical('learning_starts', [1000, 5000, 10000, 20000])
+    train_freq = trial.suggest_categorical('train_freq', [1, 4, 8, 16])
+    gradient_steps = trial.suggest_categorical('gradient_steps', [1, 2, 4, 8])
+
     n_envs = 4
     env = VecNormalize(SubprocVecEnv([make_env(i) for i in range(n_envs)], start_method='spawn'))
     eval_env = VecNormalize(SubprocVecEnv([make_env(i) for i in range(4)], start_method='spawn'))
 
-    model = SAC('MlpPolicy', env, verbose=1)
+    model = SAC('MlpPolicy', env, verbose=0, learning_rate=learning_rate,
+                ent_coef=ent_coef, gamma=gamma, tau=tau, batch_size=batch_size,
+                buffer_size=buffer_size, learning_starts=learning_starts,
+                train_freq=train_freq, gradient_steps=gradient_steps)
+
     eval_callback = EvalCallback(eval_env, eval_freq=5000, n_eval_episodes=10, deterministic=True)
+    model.learn(total_timesteps=10000, callback=eval_callback)
+
+    mean_reward, _ = evaluate_policy(model, eval_env, n_eval_episodes=20, deterministic=True)
+    try:
+        return mean_reward
+    finally:
+        cleanup_env(env)
+        cleanup_env(eval_env)
+
+def train_model(best_params, total_timesteps=10000):
+    n_envs = 4
+    env = VecNormalize(SubprocVecEnv([make_env(i) for i in range(n_envs)], start_method='spawn'))
+    eval_env = VecNormalize(SubprocVecEnv([make_env(i) for i in range(4)], start_method='spawn'))
+
+    model = SAC('MlpPolicy', env, verbose=1, **best_params)
+    eval_callback = EvalCallback(eval_env, eval_freq=50000, n_eval_episodes=10, deterministic=True)
 
     start_time = time.time()
     try:
@@ -68,20 +99,18 @@ def evaluate_model(model, env, episodes=50):
         for episode in range(1, episodes + 1):
             state, _ = env.reset()
             done = False
+            truncated = False
             score = 0
-            step = 0
-            while not done:
+            step_count = 0
+            while not (done or truncated):
                 action, _ = model.predict(state, deterministic=True)
-                print(f"Episode {episode}, Step {step}: Action = {action}")
-                state, reward, done, truncated, info = env.step(action)
-                print(f"  State = {state[:2]}, Reward = {reward}, Done = {done}, Truncated = {truncated}")
+                state, reward, done, truncated, _ = env.step(action)
                 score += reward
+                step_count += 1
                 env.render()
-                step += 1
-                if step >= 20:  # Add a step limit to prevent infinite loops
-                    print("Step limit reached")
+                if step_count >= env.max_episode_steps:
                     break
-            print(f'Episode: {episode} Score: {score}')
+            print(f'Episode: {episode} Score: {score:.2f} Steps: {step_count}')
     except KeyboardInterrupt:
         print("Evaluation interrupted by user.")
     finally:
@@ -94,10 +123,17 @@ if __name__ == "__main__":
     env.reset()
     env.close()
 
-    # Train model
-    print("\nTraining model...")
+    # Run Optuna study
+    print("\nRunning Optuna study...")
+    study = optuna.create_study(direction='maximize')
+    study.optimize(objective, n_trials=1, n_jobs=1)  # Adjust n_trials and n_jobs as needed
+    best_params = study.best_params
+    print("Best parameters:", best_params)
+
+    # Train model with best parameters
+    print("\nTraining model with best parameters...")
     start_time = time.time()
-    model = train_model()
+    model = train_model(best_params)
     end_time = time.time()
     print(f"Time taken for training: {end_time - start_time:.2f} seconds")
 

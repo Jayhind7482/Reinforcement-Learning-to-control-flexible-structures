@@ -52,7 +52,7 @@ def objective(trial):
         cleanup_env(env)
         cleanup_env(eval_env)
 
-def train_model(best_params, total_timesteps=10000):
+def train_model(best_params, total_timesteps=100000):
     n_envs = 4
     env = VecNormalize(SubprocVecEnv([make_env(i) for i in range(n_envs)], start_method='spawn'))
     eval_env = VecNormalize(SubprocVecEnv([make_env(i) for i in range(4)], start_method='spawn'))

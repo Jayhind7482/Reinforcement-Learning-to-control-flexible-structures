@@ -54,7 +54,7 @@ class OptimizedElasticaEnv(gym.Env):
     def __init__(self):
         super().__init__()
         # Update action space to match cheat sheet ranges
-        self.action_space = Box(low=np.array([-2, -2]), high=np.array([2, 2]), dtype=np.float32)
+        self.action_space = Box(low=np.array([-5, -5]), high=np.array([5, 5]), dtype=np.float32)
         self.observation_space = Box(low=-100, high=100, shape=(13,), dtype=np.float32)
         # Update target space to match cheat sheet box
         self.target_space = Box(low=np.array([0.5, -0.4]), high=np.array([0.9, 0.4]), dtype=np.float32)

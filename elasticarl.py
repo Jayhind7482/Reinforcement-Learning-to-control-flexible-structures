@@ -100,7 +100,7 @@ def evaluate_model(model, env, episodes=50, save_video=True):
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         video_path = os.path.join('Training', 'Videos', 'evaluation.mp4')
         os.makedirs(os.path.dirname(video_path), exist_ok=True)
-        out = cv2.VideoWriter(video_path, fourcc, 30.0, (env.screen_width, env.screen_height))
+        out = cv2.VideoWriter(video_path, fourcc, 20.0, (env.screen_width, env.screen_height))
     
     try:
         for episode in range(1, episodes + 1):

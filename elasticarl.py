@@ -94,7 +94,6 @@ def train_model(best_params, total_timesteps=10000):
 
 def evaluate_model(model, env, episodes=50):
     env.enable_render = True
-    env.render()
     try:
         for episode in range(1, episodes + 1):
             state, _ = env.reset()
@@ -107,7 +106,7 @@ def evaluate_model(model, env, episodes=50):
                 state, reward, done, truncated, _ = env.step(action)
                 score += reward
                 step_count += 1
-                env.render()
+                env.render()  # Call render after each step
                 if step_count >= env.max_episode_steps:
                     break
             print(f'Episode: {episode} Score: {score:.2f} Steps: {step_count}')
@@ -146,6 +145,7 @@ if __name__ == "__main__":
     # Evaluate model
     print("\nEvaluating model...")
     eval_env = OptimizedElasticaEnv()
+    eval_env.enable_render = True  # Ensure rendering is enabled
     evaluate_model(model, eval_env)
 
     eval_env.close()

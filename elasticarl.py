@@ -45,7 +45,7 @@ def objective(trial):
                 train_freq=train_freq, gradient_steps=gradient_steps)
 
     eval_callback = EvalCallback(eval_env, eval_freq=5000, n_eval_episodes=10, deterministic=True)
-    model.learn(total_timesteps=10000, callback=eval_callback)
+    model.learn(total_timesteps=1000, callback=eval_callback)
 
     mean_reward, _ = evaluate_policy(model, eval_env, n_eval_episodes=20, deterministic=True)
     try:
@@ -54,7 +54,7 @@ def objective(trial):
         cleanup_env(env)
         cleanup_env(eval_env)
 
-def train_model(best_params, total_timesteps=1000):
+def train_model(best_params, total_timesteps=100000):
     n_envs = 4
     env = VecNormalize(SubprocVecEnv([make_env(i) for i in range(n_envs)], start_method='spawn'))
     eval_env = VecNormalize(SubprocVecEnv([make_env(i) for i in range(4)], start_method='spawn'))
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     # Run Optuna study
     print("\nRunning Optuna study...")
     study = optuna.create_study(direction='maximize')
-    study.optimize(objective, n_trials=1, n_jobs=1)  # Adjust n_trials and n_jobs as needed
+    study.optimize(objective, n_trials=20, n_jobs=1)  # Adjust n_trials and n_jobs as needed
     best_params = study.best_params
     print("Best parameters:", best_params)
 

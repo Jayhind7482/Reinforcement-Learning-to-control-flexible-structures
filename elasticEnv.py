@@ -93,16 +93,10 @@ class OptimizedElasticaEnv(gym.Env):
 
     def step(self, action):
         self.num_timestep += 1
-        
-        # Log the current state before applying the action
-        print(f"Before step - h: {self.h}, v: {self.v}")
-        print(f"Action: {action}")
-        
+            
         self.h += action[0]
         self.v += action[1]
-        
-        print(f"After step - h: {self.h}, v: {self.v}")
-        
+
         sol = elastica_solve(self.h, self.v, self.l, self.s)
         self.X, self.Y, self.theta_dash_0, self.theta_dash_l, self.theta_l, self.E = elastica_compute(sol, self.l, self.s)
 

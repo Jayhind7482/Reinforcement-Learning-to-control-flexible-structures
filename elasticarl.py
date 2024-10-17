@@ -1,6 +1,8 @@
 import os
 import time
 import optuna
+import cv2
+import numpy as np
 from stable_baselines3 import SAC
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor, VecNormalize
 from stable_baselines3.common.evaluation import evaluate_policy
@@ -52,7 +54,7 @@ def objective(trial):
         cleanup_env(env)
         cleanup_env(eval_env)
 
-def train_model(best_params, total_timesteps=100000):
+def train_model(best_params, total_timesteps=1000):
     n_envs = 4
     env = VecNormalize(SubprocVecEnv([make_env(i) for i in range(n_envs)], start_method='spawn'))
     eval_env = VecNormalize(SubprocVecEnv([make_env(i) for i in range(4)], start_method='spawn'))
@@ -92,8 +94,14 @@ def train_model(best_params, total_timesteps=100000):
         cleanup_env(env)
         cleanup_env(eval_env)
 
-def evaluate_model(model, env, episodes=50):
+def evaluate_model(model, env, episodes=50, save_video=True):
     env.enable_render = True
+    if save_video:
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video_path = os.path.join('Training', 'Videos', 'evaluation.mp4')
+        os.makedirs(os.path.dirname(video_path), exist_ok=True)
+        out = cv2.VideoWriter(video_path, fourcc, 30.0, (env.screen_width, env.screen_height))
+    
     try:
         for episode in range(1, episodes + 1):
             state, _ = env.reset()
@@ -106,7 +114,10 @@ def evaluate_model(model, env, episodes=50):
                 state, reward, done, truncated, _ = env.step(action)
                 score += reward
                 step_count += 1
-                env.render()  # Call render after each step
+                frame = env.render()
+                if save_video:
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                    out.write(frame_rgb)
                 if step_count >= env.max_episode_steps:
                     break
             print(f'Episode: {episode} Score: {score:.2f} Steps: {step_count}')
@@ -114,6 +125,9 @@ def evaluate_model(model, env, episodes=50):
         print("Evaluation interrupted by user.")
     finally:
         env.close()
+        if save_video:
+            out.release()
+            print(f"Evaluation video saved to: {video_path}")
 
 if __name__ == "__main__":
     # Test environment
@@ -146,6 +160,6 @@ if __name__ == "__main__":
     print("\nEvaluating model...")
     eval_env = OptimizedElasticaEnv()
     eval_env.enable_render = True  # Ensure rendering is enabled
-    evaluate_model(model, eval_env)
+    evaluate_model(model, eval_env, save_video=True)
 
     eval_env.close()

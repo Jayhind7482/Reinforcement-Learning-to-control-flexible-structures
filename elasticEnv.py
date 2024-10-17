@@ -154,17 +154,17 @@ class OptimizedElasticaEnv(gym.Env):
             pygame.init()
             self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
             pygame.display.set_caption("Optimized Elastica")
-            self.clock = pygame.time.Clock()  # Add this line
-        self._render_frame()
+            self.clock = pygame.time.Clock()
+        return self._render_frame()
 
     def _render_frame(self):
         if self.screen is None:
-            return  # Skip rendering if the screen is not initialized
+            return None
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.close()
-                return
+                return None
 
         self.screen.fill((255, 255, 255))
         offset_x = (self.screen_width - 10 * self.zoom_factor) / 2
@@ -189,7 +189,9 @@ class OptimizedElasticaEnv(gym.Env):
         self.screen.blit(score_text, (self.screen_width - score_text.get_width() - 30, 120))
         
         pygame.display.flip()
-        self.clock.tick(30)  # Add this line to control the frame rate
+        self.clock.tick(30)
+
+        return pygame.surfarray.array3d(self.screen).swapaxes(0, 1)
 
     def close(self):
         if self.screen:

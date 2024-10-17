@@ -48,17 +48,12 @@ def elastica_compute(sol, l, s):
     
     return x, y, dtheta_ds[0], dtheta_ds[-1], theta[-1], e
 
-@numba.jit(nopython=True)
-def calculate_reward(x_tip, y_tip, x_target, y_target):
-    d = np.sqrt((x_tip - x_target)**2 + (y_tip - y_target)**2)
-    base_reward = np.exp(-d)
-    return base_reward 
 
 class OptimizedElasticaEnv(gym.Env):
     def __init__(self):
         super().__init__()
         # Update action space to match cheat sheet ranges
-        self.action_space = Box(low=np.array([-32, -17]), high=np.array([32, 17]), dtype=np.float32)
+        self.action_space = Box(low=np.array([-5, -5]), high=np.array([5, 5]), dtype=np.float32)
         self.observation_space = Box(low=-100, high=100, shape=(13,), dtype=np.float32)
         # Update target space to match cheat sheet box
         self.target_space = Box(low=np.array([0.5, -0.4]), high=np.array([0.9, 0.4]), dtype=np.float32)
@@ -93,26 +88,39 @@ class OptimizedElasticaEnv(gym.Env):
 
     def step(self, action):
         self.num_timestep += 1
-        # Remove scaling of action, as the action space now matches the cheat sheet ranges
-        self.h = action[0]
-        self.v = action[1]
+        
+        # Log the current state before applying the action
+        print(f"Before step - h: {self.h}, v: {self.v}")
+        print(f"Action: {action}")
+        
+        # Scale the action
+        scaled_action = action * np.array([0.1, 0.1])  # Adjust these values as needed
+        self.h += scaled_action[0]
+        self.v += scaled_action[1]
+        
+        # Clip h and v to ensure they stay within the action space
+        self.h = np.clip(self.h, self.action_space.low[0], self.action_space.high[0])
+        self.v = np.clip(self.v, self.action_space.low[1], self.action_space.high[1])
+        
+        print(f"After step - h: {self.h}, v: {self.v}")
+        
         sol = elastica_solve(self.h, self.v, self.l, self.s)
         self.X, self.Y, self.theta_dash_0, self.theta_dash_l, self.theta_l, self.E = elastica_compute(sol, self.l, self.s)
 
         observation = self._get_observation()
-        reward = calculate_reward(self.X[-1], self.Y[-1], self.x_target, self.y_target)
-        terminated = self._check_done()
+        reward = self._calculate_reward()
+        done = self._check_done()
         truncated = self._check_truncated()
         
         info = {
             'distance_to_target': np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2),
-            'energy': self.E
+            'energy': self.E,
+            'h': self.h,
+            'v': self.v
         }
 
-        if self.enable_render:
-            self._render_frame()
 
-        return observation, reward, terminated, truncated, info
+        return observation, reward, done, truncated, info
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -201,3 +209,9 @@ class OptimizedElasticaEnv(gym.Env):
     def seed(self, seed=None):
         self.np_random, seed = gym.utils.seeding.np_random(seed)
         return [seed]
+
+    def _calculate_reward(self):
+        distance = np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2)
+        base_reward = np.exp(-distance)
+        energy_penalty = 0.1 * self.E  # Penalize high energy configurations
+        return base_reward - energy_penalty

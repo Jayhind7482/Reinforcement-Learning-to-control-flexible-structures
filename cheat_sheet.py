@@ -12,7 +12,7 @@ np.random.seed(42)
 
 # Define the parameters
 l = 1.0  # Length
-h_min, h_max = -32,   32 # Range for h  ( h =32 , v =17)
+h_min, h_max = -32,   0.5      # Range for h  ( h =32 , v =17)  
 v_min, v_max = -17 , 17
 num_points = 80  # Increased number of grid points in each direction
 
@@ -102,11 +102,11 @@ if bl:
     solved_points_list.append(closest_index)
 
 # Parallelized solution for remaining points
-def solve_for_index(i):
+def solve_for_index(i , index):
     h_adj, v_adj = grid_points[i]
     initial_guess_adjacent = np.zeros((2, len(s)))
-    initial_guess_adjacent[0] = theta_dict[random.choice(list(theta_dict.keys()))]
-    initial_guess_adjacent[1] = theta_prime_dict[random.choice(list(theta_prime_dict.keys()))]
+    initial_guess_adjacent[0] = theta_dict[index]
+    initial_guess_adjacent[1] = theta_prime_dict[index]
     bl, solution_random = solve_bvp_for_hv(h_adj, v_adj, initial_guess_adjacent)
     if bl:
         y1 = np.cos(solution_random.sol(s)[0])
@@ -126,7 +126,7 @@ with ThreadPoolExecutor() as executor:
         if not unsolved_adjacent:
             continue
         # Solve for adjacent points in parallel
-        futures = [executor.submit(solve_for_index, i) for i in unsolved_adjacent]
+        futures = [executor.submit(solve_for_index, i , current_index) for i in unsolved_adjacent]
         for future in futures:
             result = future.result()
             if result:

@@ -1,40 +1,54 @@
+from env import Elastica_env
+from stable_baselines3 import SAC
+import cv2
 import numpy as np
-from elasticEnv import OptimizedElasticaEnv
+import pygame
+import os
 
-def test_elastica_env():
-    env = OptimizedElasticaEnv()
-    env.enable_render = True  # Set to False if you don't want to render
+env = Elastica_env()
 
-    num_episodes = 100
-    max_steps = 20
+# Update the model loading path
+model_save_path = os.path.join('Training', 'SavedModels', 'SAC')
+model_file = os.path.join(model_save_path, "final_sac_model.zip")
 
-    for episode in range(num_episodes):
-        observation, _ = env.reset()
-        total_reward = 0
+# Load the model
+model = SAC.load(model_file, env=env)
+print(f"Model loaded from: {model_file}")
 
-        print(f"Episode {episode + 1}")
-        print(f"Initial observation: {observation}")
-        print(f"Target: ({env.x_target:.2f}, {env.y_target:.2f})")
+env.enable_render = True
 
-        for step in range(max_steps):
-            action = env.action_space.sample()  # Random action
-            observation, reward, terminated, truncated, _ = env.step(action)
-            total_reward += reward
+# Set up video writer
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+video = cv2.VideoWriter('elastica_simulation.mp4', fourcc, 30.0, (int(env.screen_width), int(env.screen_height)))
 
-            print(f"Step {step + 1}: Action: {action}, Reward: {reward:.4f}")
+episodes = 50
+for episode in range(1, episodes+1):
+    state, info = env.reset()
+    done = False
+    score = 0 
+    truncation = False
+    test = []
+    n_score = []
+    dis = []
+    while not (done or truncation):
+        action, _ = model.predict(state, deterministic=True)
+        state, reward, done, truncation, info = env.step(action)
+        n_score.append(reward)
+        dis.append(state[-1])
+        score += reward
+        test.append(done)
+        
+        # Capture the rendered frame
+        pygame.display.flip()
+        frame = pygame.surfarray.array3d(pygame.display.get_surface())
+        frame = cv2.transpose(frame)
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        video.write(frame)
 
-            if env.enable_render:
-                env.render()
+    print(len(test))
+    print(n_score)
+    print('Episode:{} Score:{}'.format(episode, score))
 
-            if terminated or truncated:
-                break
-
-        print(f"Episode {episode + 1} finished after {step + 1} steps")
-        print(f"Total reward: {total_reward:.4f}")
-        print(f"Final tip position: ({env.X[-1]:.2f}, {env.Y[-1]:.2f})")
-        print("--------------------")
-
-    env.close()
-
-if __name__ == "__main__":
-    test_elastica_env()
+# Release the video writer
+video.release()
+env.close()

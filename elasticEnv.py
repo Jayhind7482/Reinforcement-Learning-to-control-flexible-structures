@@ -49,25 +49,38 @@ def elastica_compute(sol, l, s):
     
     return x, y, dtheta_ds[0], dtheta_ds[-1], theta[-1], e
 
+@numba.jit(nopython=True)
+def calculate_reward(X_tip, Y_tip, x_target, y_target, E):
+    distance = np.sqrt((X_tip - x_target)**2 + (Y_tip - y_target)**2)
+    
+    # Base reward for being close to the target
+    reward = -distance
+    
+    return reward
+
 
 class OptimizedElasticaEnv(gym.Env):
     def __init__(self):
         super().__init__()
-        # Update action space to match cheat sheet ranges
-        self.action_space = Box(low=np.array([-5, -5]), high=np.array([5, 5]), dtype=np.float32)
+        # Update action space to be incremental
+        self.action_space = Box(low=np.array([-3, -3]), high=np.array([3, 3]), dtype=np.float32)
         self.observation_space = Box(low=-100, high=100, shape=(13,), dtype=np.float32)
         # Update target space to match cheat sheet box
         self.target_space = Box(low=np.array([0.5, -0.4]), high=np.array([0.9, 0.4]), dtype=np.float32)
         
-        self.l = 1  # length of the elastica (already correct)
+        self.l = 1  # length of the elastica
         self.s = np.linspace(0, self.l, 500, dtype=np.float32)
         self.num_timestep = 0
-        # Update initial h and v values to be within the new action space
+        # Initialize h and v to 0
         self.h = 0
         self.v = 0
         self.x_target = 0
         self.y_target = 0
         
+        # Add these lines to define the limits for h and v
+        self.h_limit = (-32, 32)
+        self.v_limit = (-17, 17)
+
         self.screen_width = 800
         self.screen_height = 600
         self.zoom_factor = 60
@@ -89,13 +102,15 @@ class OptimizedElasticaEnv(gym.Env):
 
         self.max_episode_steps = 19  # Add this line to define max steps
 
+        # Remove the NormalizeObservation wrapper
         self = NormalizeObservation(self)
 
     def step(self, action):
         self.num_timestep += 1
             
-        self.h += action[0]
-        self.v += action[1]
+        # Update h and v incrementally and clip them to their limits
+        self.h = np.clip(self.h + action[0], self.h_limit[0], self.h_limit[1])
+        self.v = np.clip(self.v + action[1], self.v_limit[0], self.v_limit[1])
 
         sol = elastica_solve(self.h, self.v, self.l, self.s)
         self.X, self.Y, self.theta_dash_0, self.theta_dash_l, self.theta_l, self.E = elastica_compute(sol, self.l, self.s)
@@ -105,7 +120,7 @@ class OptimizedElasticaEnv(gym.Env):
         done = self._check_done()
         truncated = self._check_truncated()
         
-        info = {}  # Simplify info dictionary
+        info = {}
 
         return observation, reward, done, truncated, info
 
@@ -116,9 +131,9 @@ class OptimizedElasticaEnv(gym.Env):
         else:
             self.np_random = np.random.default_rng()
 
-        # Initialize h and v to random values within the action space
-        self.h = 0
-        self.v = 0
+        # Initialize h and v to random values within their limits
+        self.h = self.np_random.uniform(self.h_limit[0], self.h_limit[1])
+        self.v = self.np_random.uniform(self.v_limit[0], self.v_limit[1])
         self.x_target, self.y_target = self.target_space.sample()
         
         sol = elastica_solve(self.h, self.v, self.l, self.s)
@@ -138,7 +153,8 @@ class OptimizedElasticaEnv(gym.Env):
         ], dtype=np.float32)
 
     def _check_done(self):
-        return bool(np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2) < 0.002)
+        distance = np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2)
+        return bool(distance < 0.01)  # Tightened success criterion
 
     def _check_truncated(self):
         return bool(self.num_timestep >= self.max_episode_steps)
@@ -164,23 +180,39 @@ class OptimizedElasticaEnv(gym.Env):
         offset_x = (self.screen_width - 10 * self.zoom_factor) / 2
         offset_y = (self.screen_height - 1.5 * self.zoom_factor) / 2
         
-        points = [(x * self.zoom_factor + offset_x, y * self.zoom_factor + offset_y) for x, y in zip(self.X, self.Y)]
-        pygame.draw.lines(self.screen, (0, 0, 0), False, points)
+        # Draw elastica
+        points = [(x * self.zoom_factor + offset_x, self.screen_height - (y * self.zoom_factor + offset_y)) for x, y in zip(self.X, self.Y)]
+        pygame.draw.lines(self.screen, (0, 0, 0), False, points, 2)
         
-        tip_x, tip_y = self.X[-1] * self.zoom_factor + offset_x, self.Y[-1] * self.zoom_factor + offset_y
+        # Draw tip forces
+        tip_x, tip_y = self.X[-1] * self.zoom_factor + offset_x, self.screen_height - (self.Y[-1] * self.zoom_factor + offset_y)
         pygame.draw.line(self.screen, (255, 0, 0), (tip_x, tip_y), (tip_x + 50 * np.sign(self.h), tip_y), 3)
-        pygame.draw.line(self.screen, (0, 255, 0), (tip_x, tip_y), (tip_x, tip_y + 50 * np.sign(self.v)), 3)
+        pygame.draw.line(self.screen, (0, 255, 0), (tip_x, tip_y), (tip_x, tip_y - 50 * np.sign(self.v)), 3)
         
-        base_x, base_y = self.X[0] * self.zoom_factor + offset_x, self.Y[0] * self.zoom_factor + offset_y
+        # Draw base
+        base_x, base_y = self.X[0] * self.zoom_factor + offset_x, self.screen_height - (self.Y[0] * self.zoom_factor + offset_y)
         pygame.draw.line(self.screen, (0, 0, 0), (base_x, base_y), (base_x, base_y + 25), 3)
         pygame.draw.line(self.screen, (0, 0, 0), (base_x, base_y), (base_x, base_y - 25), 3)
         
-        target_x, target_y = self.x_target * self.zoom_factor + offset_x, self.y_target * self.zoom_factor + offset_y
+        # Draw target
+        target_x, target_y = self.x_target * self.zoom_factor + offset_x, self.screen_height - (self.y_target * self.zoom_factor + offset_y)
         pygame.draw.circle(self.screen, (255, 0, 0), (int(target_x), int(target_y)), 5)
         
-        font = pygame.font.Font(None, 36)
-        score_text = font.render(f"Timesteps: {self.num_timestep}", True, (0, 0, 0))
-        self.screen.blit(score_text, (self.screen_width - score_text.get_width() - 30, 120))
+        # Draw text information
+        font = pygame.font.Font(None, 24)
+        texts = [
+            f"Timesteps: {self.num_timestep}",
+            f"H: {self.h:.2f}",
+            f"V: {self.v:.2f}",
+            f"Tip X: {self.X[-1]:.2f}",
+            f"Tip Y: {self.Y[-1]:.2f}",
+            f"Target X: {self.x_target:.2f}",
+            f"Target Y: {self.y_target:.2f}",
+            f"Energy: {self.E:.2f}"
+        ]
+        for i, text in enumerate(texts):
+            text_surface = font.render(text, True, (0, 0, 0))
+            self.screen.blit(text_surface, (10, 10 + i * 25))
         
         pygame.display.flip()
         self.clock.tick(30)
@@ -198,11 +230,4 @@ class OptimizedElasticaEnv(gym.Env):
         return [seed]
 
     def _calculate_reward(self):
-        distance = np.sqrt((self.X[-1] - self.x_target)**2 + (self.Y[-1] - self.y_target)**2)
-        reward = np.exp(-distance)
-        
-        # Add a small penalty for extreme actions to encourage exploration
-        action_penalty = 0.01 * (np.abs(self.h) / self.action_space.high[0] + np.abs(self.v) / self.action_space.high[1])
-        reward -= action_penalty
-        
-        return reward
+        return calculate_reward(self.X[-1], self.Y[-1], self.x_target, self.y_target, self.E)

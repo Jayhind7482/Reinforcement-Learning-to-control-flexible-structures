@@ -67,7 +67,7 @@ def train_model(best_params, total_timesteps=100000):
         model.learn(total_timesteps=total_timesteps, callback=eval_callback)
         return model
     except KeyboardInterrupt:
-        print("\nTraining interrupted. Calculating statistics...")
+        print("\n\033[93mTraining interrupted. Calculating statistics...\033[0m")
     finally:
         end_time = time.time()
         total_time = end_time - start_time
@@ -84,12 +84,12 @@ def train_model(best_params, total_timesteps=100000):
             total_episodes = 0
             episodes_per_second = 0
 
-        print(f"\nTraining Statistics:")
-        print(f"Total training time: {total_time:.2f} seconds")
-        print(f"Total timesteps: {model.num_timesteps}")
-        print(f"Total episodes: {total_episodes}")
-        print(f"Episodes per second: {episodes_per_second:.2f}")
-        print(f"Frames per second: {model.num_timesteps / total_time:.2f}")
+        print("\n\033[1m\033[94mTraining Statistics:\033[0m")
+        print(f"\033[1mTotal training time:\033[0m {total_time:.2f} seconds")
+        print(f"\033[1mTotal timesteps:\033[0m {model.num_timesteps}")
+        print(f"\033[1mTotal episodes:\033[0m {total_episodes}")
+        print(f"\033[1mEpisodes per second:\033[0m {episodes_per_second:.2f}")
+        print(f"\033[1mFrames per second:\033[0m {model.num_timesteps / total_time:.2f}")
 
         cleanup_env(env)
         cleanup_env(eval_env)
@@ -120,44 +120,44 @@ def evaluate_model(model, env, episodes=50, save_video=True):
                     out.write(frame_rgb)
                 if step_count >= env.max_episode_steps:
                     break
-            print(f'Episode: {episode} Score: {score:.2f} Steps: {step_count}')
+            print(f'\033[1mEpisode:\033[0m {episode:3d} | \033[1mScore:\033[0m {score:8.2f} | \033[1mSteps:\033[0m {step_count:4d}')
     except KeyboardInterrupt:
-        print("Evaluation interrupted by user.")
+        print("\n\033[93mEvaluation interrupted by user.\033[0m")
     finally:
         env.close()
         if save_video:
             out.release()
-            print(f"Evaluation video saved to: {video_path}")
+            print(f"\n\033[92mEvaluation video saved to:\033[0m {video_path}")
 
 if __name__ == "__main__":
+    print("\033[1m\033[95mTesting environment...\033[0m")
     # Test environment
-    print("Testing environment...")
     env = OptimizedElasticaEnv()
     env.reset()
     env.close()
 
+    print("\n\033[1m\033[95mRunning Optuna study...\033[0m")
     # Run Optuna study
-    print("\nRunning Optuna study...")
     study = optuna.create_study(direction='maximize')
-    study.optimize(objective, n_trials=20, n_jobs=1)  # Adjust n_trials and n_jobs as needed
+    study.optimize(objective, n_trials=3, n_jobs=1)  # Adjust n_trials and n_jobs as needed
     best_params = study.best_params
-    print("Best parameters:", best_params)
+    print("\033[1mBest parameters:\033[0m", best_params)
 
+    print("\n\033[1m\033[95mTraining model with best parameters...\033[0m")
     # Train model with best parameters
-    print("\nTraining model with best parameters...")
     start_time = time.time()
     model = train_model(best_params)
     end_time = time.time()
-    print(f"Time taken for training: {end_time - start_time:.2f} seconds")
+    print(f"\033[1mTime taken for training:\033[0m {end_time - start_time:.2f} seconds")
 
     # Save model
     model_path = os.path.join('Training', 'Saved Models', 'OptimizedElastica_SAC')
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
     model.save(model_path)
-    print(f"Model saved to: {model_path}")
+    print(f"\033[92mModel saved to:\033[0m {model_path}")
 
+    print("\n\033[1m\033[95mEvaluating model...\033[0m")
     # Evaluate model
-    print("\nEvaluating model...")
     eval_env = OptimizedElasticaEnv()
     eval_env.enable_render = True  # Ensure rendering is enabled
     evaluate_model(model, eval_env, save_video=True)

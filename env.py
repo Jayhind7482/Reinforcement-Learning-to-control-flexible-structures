@@ -27,7 +27,7 @@ class Elastica_env(gym.Env):
         self.v = 0.0  # Initialize v to the middle of the range
 
         # Pre-allocate arrays for elastica calculation
-        self.s = np.linspace(0, 6, 500)
+        self.s = np.linspace(0, 1, 500)
         self.y0 = np.zeros((2, self.s.size))
 
         # Load the cheat sheet data

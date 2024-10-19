@@ -23,8 +23,8 @@ class Elastica_env(gym.Env):
         self.screen_height = 600.0
         self.zoom_factor = 60.0
         self.enable_render = False
-        self.h = 0.0  # Initialize h to the middle of the range
-        self.v = 0.0  # Initialize v to the middle of the range
+        self.h = -20  # Initialize h to the middle of the range
+        self.v = -10  # Initialize v to the middle of the range
 
         # Pre-allocate arrays for elastica calculation
         self.s = np.linspace(0, 1, 500)
@@ -124,8 +124,8 @@ class Elastica_env(gym.Env):
         self.y_target = targ[1]
         
         # Initialize h and v to the middle of their ranges
-        self.h = 0.0
-        self.v = 0.0
+        self.h = -20
+        self.v = 10
 
         self.X, self.Y, self.theta_dash_0, self.theta_dash_l, self.theta_l, self.E = self.elastica(self.h, self.v)
         self.num_timestep = 0

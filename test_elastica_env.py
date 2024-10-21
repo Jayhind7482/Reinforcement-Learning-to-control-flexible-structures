@@ -30,6 +30,15 @@ for episode in range(1, episodes+1):
     test = []
     n_score = []
     dis = []
+    
+    # Render initial state
+    env.render(True)
+    pygame.display.flip()
+    frame = pygame.surfarray.array3d(pygame.display.get_surface())
+    frame = cv2.transpose(frame)
+    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+    video.write(frame)
+    
     while not (done or truncation):
         action, _ = model.predict(state, deterministic=True)
         state, reward, done, truncation, info = env.step(action)
@@ -38,16 +47,15 @@ for episode in range(1, episodes+1):
         score += reward
         test.append(done)
         
-        # Capture the rendered frame
+        # Render and capture frame for every timestep
+        env.render(True)
         pygame.display.flip()
         frame = pygame.surfarray.array3d(pygame.display.get_surface())
         frame = cv2.transpose(frame)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         video.write(frame)
 
-    print(len(test))
-    print(n_score)
-    print('Episode:{} Score:{}'.format(episode, score))
+    print(f'Episode: {episode}, Score: {score:.4f}, Steps: {len(test)}')
 
 # Release the video writer
 video.release()

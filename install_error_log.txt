@@ -1,0 +1,18 @@
+  [1;31merror[0m: [1msubprocess-exited-with-error[0m
+  
+  [31m×[0m [32mpython setup.py egg_info[0m did not run successfully.
+  [31m│[0m exit code: [1;36m1[0m
+  [31m╰─>[0m [31m[3 lines of output][0m
+  [31m   [0m /home/codespace/.python/current/lib/python3.12/site-packages/setuptools/_distutils/dist.py:261: UserWarning: Unknown distribution option: 'tests_require'
+  [31m   [0m   warnings.warn(msg)
+  [31m   [0m error in gym setup command: 'extras_require' must be a dictionary whose values are strings or lists of strings containing valid project/version requirement specifiers.
+  [31m   [0m [31m[end of output][0m
+  
+  [1;35mnote[0m: This error originates from a subprocess, and is likely not a problem with pip.
+[1;31merror[0m: [1mmetadata-generation-failed[0m
+
+[31m×[0m Encountered error while generating package metadata.
+[31m╰─>[0m See above for output.
+
+[1;35mnote[0m: This is an issue with the package mentioned above, not pip.
+[1;36mhint[0m: See above for details.
